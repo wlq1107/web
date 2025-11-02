@@ -1,695 +1,1364 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>便签墙</title>
-		<style>
-			* {
-				box-sizing: border-box;
-				margin: 0;
-				padding: 0;
-			}
-
-			body {
-				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-				background-image: linear-gradient(0deg, #eee 1px, transparent 0),
-					linear-gradient(90deg, #eee 1px, transparent 0);
-				background-size: 30px 30px;
-				color: #333;
-				min-height: 100dvh;
-				overflow: hidden;
-			}
-
-			body.has-maximized-card {
-				overflow: hidden;
-			}
-
-			body.is-mobile {
-				overflow-y: auto;
-			}
-
-			#board {
-				position: relative;
-				width: 100vw;
-				height: 100dvh;
-				overflow: hidden;
-			}
-
-			body.is-mobile #board {
-				height: auto;
-				min-height: 100dvh;
-			}
-
-			.card {
-				position: absolute;
-				width: 220px;
-				border-radius: 12px;
-				box-shadow: 0 16px 35px rgba(0, 0, 0, 0.2);
-				background: #fff;
-				border: 1px solid rgba(0, 0, 0, 0.08);
-				overflow: hidden;
-				opacity: 0;
-				transform-origin: center;
-				transition: transform 0.35s ease, opacity 0.35s ease, left 0.35s ease,
-					top 0.35s ease, width 0.35s ease, height 0.35s ease,
-					border-radius 0.35s ease;
-			}
-
-			.card.dragging {
-				transition: none;
-				box-shadow: 0 22px 45px rgba(0, 0, 0, 0.35);
-			}
-
-			.card.maximized {
-				position: fixed;
-				inset: 0;
-				width: 100vw;
-				height: 100vh;
-				height: 100dvh;
-				border-radius: 0;
-				box-shadow: 0 28px 60px rgba(0, 0, 0, 0.4);
-			}
-
-			.card-header {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-				padding: 10px 12px;
-				background: rgba(255, 255, 255, 0.7);
-				cursor: grab;
-				user-select: none;
-				touch-action: pan-y;
-			}
-
-			.card-header.dragging {
-				cursor: grabbing;
-			}
-
-			.window-controls {
-				display: flex;
-				align-items: center;
-				gap: 6px;
-			}
-
-			.window-controls .control {
-				position: relative;
-				width: 12px;
-				height: 12px;
-				border-radius: 50%;
-				border: 1px solid rgba(0, 0, 0, 0.08);
-				background: #ccc;
-				cursor: pointer;
-				outline: none;
-				padding: 0;
-				display: inline-flex;
-				align-items: center;
-				justify-content: center;
-			}
-
-			.window-controls .control.close {
-				background: #ff5f57;
-				border-color: #e0443e;
-			}
-
-			.window-controls .control.minimize {
-				background: #febb2e;
-				border-color: #dea123;
-			}
-
-			.window-controls .control.maximize {
-				background: #28c840;
-				border-color: #1aab2c;
-			}
-
-			.window-controls .control::after {
-				content: '';
-				position: absolute;
-				top: 50%;
-				left: 50%;
-				transform: translate(-50%, -50%);
-				opacity: 0;
-				transition: opacity 0.2s ease;
-			}
-
-			.card-header:hover .window-controls .control::after {
-				opacity: 0.8;
-			}
-
-			.window-controls .control.close::after {
-				content: '×';
-				width: auto;
-				height: auto;
-				background: none;
-				font-size: 10px;
-				line-height: 1;
-				font-weight: 700;
-				color: rgba(0, 0, 0, 0.7);
-			}
-
-			.window-controls .control.minimize::after {
-				width: 6px;
-				height: 2px;
-				background: rgba(0, 0, 0, 0.6);
-			}
-
-			.window-controls .control.maximize::after {
-				width: 6px;
-				height: 6px;
-				background: linear-gradient(
-					45deg,
-					rgba(0, 0, 0, 0.6) 0%,
-					rgba(0, 0, 0, 0.6) 45%,
-					transparent 45%,
-					transparent 55%,
-					rgba(0, 0, 0, 0.6) 55%,
-					rgba(0, 0, 0, 0.6) 100%
-				);
-			}
-
-			.card-title {
-				font-size: 13px;
-				font-weight: 600;
-				color: rgba(0, 0, 0, 0.55);
-				padding-left: 10px;
-				flex: 1;
-			}
-
-			.card-body {
-				padding: 16px;
-				font-size: 16px;
-				line-height: 1.4;
-				font-weight: 600;
-				color: rgba(0, 0, 0, 0.72);
-				word-break: break-word;
-				overflow-wrap: anywhere;
-				white-space: normal;
-			}
-
-			.card.maximized {
-				display: flex;
-				flex-direction: column;
-			}
-
-			.card.maximized .card-title {
-				display: none;
-			}
-
-			.card.maximized .card-body {
-				flex: 1;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				width: 100%;
-				height: 100%;
-				text-align: center;
-				padding: clamp(32px, min(10vw, 10vh), 128px);
-				padding-top: clamp(72px, min(14vw, 14vh), 192px);
-				font-size: clamp(48px, min(18vw, 18vh), 200px);
-				line-height: 1.05;
-			}
-
-			@media (max-width: 768px) {
-				.card {
-					width: 180px;
-					border-radius: 10px;
-				}
-
-				.card-body {
-					padding: 14px;
-					font-size: 14px;
-				}
-
-				.card-title {
-					font-size: 12px;
-				}
-			}
-		</style>
-	</head>
-	<body>
-		<div id="board"></div>
-
-		<script>
-			const board = document.getElementById('board')
-			const messages = [
-				'保持好心情',
-				'多喝水哦',
-				'今天辛苦啦',
-				'早点休息',
-				'记得吃水果',
-				'加油，你可以的',
-				'祝你顺利',
-				'保持微笑呀',
-				'愿所有烦恼都消失',
-				'期待下一次见面',
-				'梦想总会实现',
-				'天气冷了，多穿衣服',
-				'记得给自己放松',
-				'每天都要元气满满',
-				'今天也要好好爱自己',
-				'适当休息一下'
-				'莹莹天天开心'
-			]
-
-			const colors = [
-				'#ffe0e3',
-				'#c7f0ff',
-				'#ffd8a8',
-				'#d9f2d9',
-				'#e5d7ff',
-				'#f9f7d9',
-				'#d2f0f8',
-				'#ffd4f5'
-			]
-
-			const cardStates = new WeakMap()
-			// Reserve a very high层级给全屏卡片，避免被后续元素覆盖
-			const MAXIMIZED_LAYER = 1000000
-			let activeMaximizedCard = null
-			const pointerMediaQuery = window.matchMedia('(pointer: coarse)')
-			let isMobile =
-				pointerMediaQuery.matches || window.innerWidth <= 768
-			let maxCards = isMobile ? 120 : 180 // 限制 DOM 节点数量，减轻移动端压力
-			const initialCardCount = isMobile ? 18 : 30
-			let spawnInterval = isMobile ? 700 : 400
-			let zIndexCursor = 200
-			let spawnTimer = null
-
-			document.body.classList.toggle('is-mobile', isMobile)
-
-			function randomFrom(array) {
-				return array[Math.floor(Math.random() * array.length)]
-			}
-
-			function clamp(value, min, max) {
-				return Math.min(Math.max(value, min), max)
-			}
-
-			function applyTransform(card, state) {
-				const scale = state.scale ?? 1
-				const angle = state.angle ?? 0
-				card.style.transform = `scale(${scale}) rotate(${angle}deg)`
-			}
-
-			function bringToFront(card) {
-				if (card === activeMaximizedCard) {
-					card.style.zIndex = MAXIMIZED_LAYER
-					return
-				}
-
-				zIndexCursor += 1
-				if (activeMaximizedCard && zIndexCursor >= MAXIMIZED_LAYER) {
-					zIndexCursor = MAXIMIZED_LAYER - 1
-				}
-
-				card.style.zIndex = zIndexCursor
-			}
-
-			function updateBodyMaximizedState() {
-				document.body.classList.toggle(
-					'has-maximized-card',
-					Boolean(activeMaximizedCard)
-				)
-			}
-
-			function scheduleNextSpawn() {
-				clearTimeout(spawnTimer)
-				spawnTimer = setTimeout(() => {
-					if (!document.hidden) {
-						createCard()
-					}
-					scheduleNextSpawn()
-				}, spawnInterval)
-			}
-
-			function syncMobileMode() {
-				const nextIsMobile =
-					pointerMediaQuery.matches || window.innerWidth <= 768
-				if (nextIsMobile === isMobile) return
-
-				isMobile = nextIsMobile
-				maxCards = isMobile ? 120 : 180
-				spawnInterval = isMobile ? 700 : 400
-				document.body.classList.toggle('is-mobile', isMobile)
-				scheduleNextSpawn()
-			}
-
-			function handleBoardClick(event) {
-				const control = event.target.closest('.control')
-				if (!control) return
-
-				const card = control.closest('.card')
-				if (!card || !board.contains(card)) return
-
-				event.preventDefault()
-
-				if (control.classList.contains('close')) {
-					closeCard(card)
-				} else if (control.classList.contains('minimize')) {
-					minimizeCard(card)
-				} else if (control.classList.contains('maximize')) {
-					toggleMaximize(card)
-				}
-			}
-
-			function handleBoardPointerDown(event) {
-				const card = event.target.closest('.card')
-				if (!card || !board.contains(card)) return
-
-				const control = event.target.closest('.control')
-				const header = event.target.closest('.card-header')
-				const pointerType = event.pointerType || 'mouse'
-				const isPrimaryPointer = event.isPrimary !== false
-
-				if (
-					header &&
-					!control &&
-					pointerType !== 'touch' &&
-					isPrimaryPointer
-				) {
-					startDrag(event, card)
-					return
-				}
-
-				bringToFront(card)
-			}
-
-			function handleBoardDoubleClick(event) {
-				const header = event.target.closest('.card-header')
-				if (!header || event.target.closest('.control')) return
-
-				const card = header.closest('.card')
-				if (!card || !board.contains(card)) return
-
-				toggleMaximize(card)
-			}
-
-			board.addEventListener('click', handleBoardClick)
-			board.addEventListener('pointerdown', handleBoardPointerDown)
-			board.addEventListener('dblclick', handleBoardDoubleClick)
-
-			function closeCard(card) {
-				const state = cardStates.get(card)
-				if (!state || state.closing) return
-				if (card === activeMaximizedCard) {
-					activeMaximizedCard = null
-					updateBodyMaximizedState()
-				}
-				state.closing = true
-				state.scale = 0.1
-				card.style.opacity = '0'
-				applyTransform(card, state)
-
-				const handleTransitionEnd = event => {
-					if (event.propertyName === 'opacity') {
-						card.removeEventListener('transitionend', handleTransitionEnd)
-						card.remove()
-					}
-				}
-
-				card.addEventListener('transitionend', handleTransitionEnd)
-			}
-
-			function minimizeCard(card) {
-				const state = cardStates.get(card)
-				if (!state || state.closing) return
-
-				// 最小化动画：缩小并淡出到底部，结束时移除节点释放内存
-				const runMinimize = () => {
-					state.closing = true
-					bringToFront(card)
-					const bottom = Math.max(window.innerHeight - 24, 0)
-					const targetLeft = clamp(
-						state.left,
-						16,
-						Math.max(window.innerWidth - card.offsetWidth - 16, 16)
-					)
-
-					state.left = targetLeft
-					state.top = bottom
-					state.scale = 0.1
-					state.angle = 0
-					card.style.left = `${targetLeft}px`
-					card.style.top = `${bottom}px`
-					card.style.opacity = '0.35'
-					applyTransform(card, state)
-
-					const handleTransitionEnd = event => {
-						if (event.propertyName === 'transform') {
-							card.removeEventListener('transitionend', handleTransitionEnd)
-							card.remove()
-						}
-					}
-
-					card.addEventListener('transitionend', handleTransitionEnd)
-				}
-
-				if (state.maximized) {
-					restoreFromMaximize(card, state)
-					requestAnimationFrame(() => {
-						requestAnimationFrame(runMinimize)
-					})
-					return
-				}
-
-				runMinimize()
-			}
-
-			function toggleMaximize(card) {
-				const state = cardStates.get(card)
-				if (!state || state.closing) return
-
-				if (state.maximized) {
-					restoreFromMaximize(card, state)
-				} else {
-					maximizeCard(card, state)
-				}
-			}
-
-			function maximizeCard(card, state) {
-				if (activeMaximizedCard && activeMaximizedCard !== card) {
-					const activeState = cardStates.get(activeMaximizedCard)
-					if (activeState) {
-						restoreFromMaximize(activeMaximizedCard, activeState)
-					}
-				}
-
-				state.beforeMaximize = {
-					left: state.left,
-					top: state.top,
-					scale: state.scale ?? 1,
-					angle: state.angle ?? 0,
-					width: card.offsetWidth,
-					height: card.offsetHeight,
-					inlinePosition: card.style.position
-				}
-
-				card.classList.add('maximized')
-				card.style.position = 'fixed'
-				card.style.left = '0px'
-				card.style.top = '0px'
-				card.style.width = '100vw'
-				card.style.height = '100dvh'
-				card.style.borderRadius = '0'
-
-				state.left = 0
-				state.top = 0
-				state.scale = 1
-				state.angle = 0
-				applyTransform(card, state)
-				activeMaximizedCard = card
-				bringToFront(card)
-				state.maximized = true
-				updateBodyMaximizedState()
-			}
-
-			function restoreFromMaximize(card, state) {
-				const previous = state.beforeMaximize
-				if (!previous) return
-
-				card.classList.remove('maximized')
-				card.style.position = previous.inlinePosition || 'absolute'
-				card.style.left = `${previous.left}px`
-				card.style.top = `${previous.top}px`
-				card.style.width = `${previous.width}px`
-				card.style.height = `${previous.height}px`
-				card.style.borderRadius = '12px'
-
-				state.left = previous.left
-				state.top = previous.top
-				state.scale = previous.scale ?? 1
-				state.angle = previous.angle ?? state.angle ?? 0
-				applyTransform(card, state)
-				state.maximized = false
-				if (activeMaximizedCard === card) {
-					activeMaximizedCard = null
-					updateBodyMaximizedState()
-				}
-				bringToFront(card)
-				setTimeout(() => {
-					if (!state.maximized) {
-						card.style.width = ''
-						card.style.height = ''
-						card.style.borderRadius = ''
-						if (previous.inlinePosition) {
-							card.style.position = previous.inlinePosition
-						} else {
-							card.style.position = ''
-						}
-						state.beforeMaximize = null
-					}
-				}, 360)
-			}
-
-			function startDrag(event, card) {
-				const control = event.target.closest('.control')
-				if (control) return
-
-				const state = cardStates.get(card)
-				if (!state || state.closing || state.maximized) return
-
-				// 鼠标拖拽使用 rAF 节流，避免频繁触发布局计算
-				event.preventDefault()
-				bringToFront(card)
-
-				const header = card.querySelector('.card-header')
-				card.classList.add('dragging')
-				header.classList.add('dragging')
-
-				state.dragging = true
-				state.dragOffsetX = event.clientX - state.left
-				state.dragOffsetY = event.clientY - state.top
-
-				let dragFrame = null
-				let pendingLeft = state.left
-				let pendingTop = state.top
-
-				const commitDrag = () => {
-					dragFrame = null
-					const maxLeft = Math.max(window.innerWidth - card.offsetWidth, 0)
-					const maxTop = Math.max(window.innerHeight - card.offsetHeight, 0)
-					state.left = clamp(pendingLeft, -card.offsetWidth * 0.4, maxLeft)
-					state.top = clamp(pendingTop, -card.offsetHeight * 0.4, maxTop)
-					card.style.left = `${state.left}px`
-					card.style.top = `${state.top}px`
-				}
-
-				const handlePointerMove = moveEvent => {
-					if (!state.dragging) return
-
-					pendingLeft = moveEvent.clientX - state.dragOffsetX
-					pendingTop = moveEvent.clientY - state.dragOffsetY
-					if (dragFrame === null) {
-						dragFrame = requestAnimationFrame(commitDrag)
-					}
-				}
-
-				const handlePointerUp = () => {
-					state.dragging = false
-					card.classList.remove('dragging')
-					header.classList.remove('dragging')
-					if (dragFrame !== null) {
-						cancelAnimationFrame(dragFrame)
-						commitDrag()
-					}
-					document.removeEventListener('pointermove', handlePointerMove)
-					document.removeEventListener('pointerup', handlePointerUp)
-				}
-
-				document.addEventListener('pointermove', handlePointerMove)
-				document.addEventListener('pointerup', handlePointerUp)
-			}
-
-			function createCard() {
-				const card = document.createElement('div')
-				card.className = 'card'
-
-				const color = randomFrom(colors)
-				const angleRange = isMobile ? 6 : 10
-				const angle = (Math.random() - 0.5) * angleRange
-				const entryScale = isMobile ? 0.8 : 0.65
-				const cardWidth = isMobile ? 180 : 220
-				const cardHeight = isMobile ? 130 : 140
-				const horizontalMargin = isMobile ? 12 : 16
-				const verticalMargin = isMobile ? 12 : 20
-				const left =
-					horizontalMargin +
-					Math.random() *
-						Math.max(window.innerWidth - cardWidth - horizontalMargin * 2, 0)
-				const top =
-					verticalMargin +
-					Math.random() *
-						Math.max(window.innerHeight - cardHeight - verticalMargin * 2, 0)
-
-				card.style.background = color
-				card.style.left = `${left}px`
-				card.style.top = `${top}px`
-				card.style.opacity = '0'
-				if (activeMaximizedCard && zIndexCursor >= MAXIMIZED_LAYER - 2) {
-					zIndexCursor = MAXIMIZED_LAYER - 2
-				}
-				card.style.zIndex = ++zIndexCursor
-
-				card.innerHTML = `
-					<div class="card-header">
-						<div class="window-controls">
-							<button class="control close" type="button" aria-label="关闭"></button>
-							<button class="control minimize" type="button" aria-label="最小化"></button>
-							<button class="control maximize" type="button" aria-label="最大化"></button>
-						</div>
-						<div class="card-title">温馨提示</div>
-					</div>
-					<div class="card-body">${randomFrom(messages)}</div>
-				`
-
-				const state = {
-					angle,
-					scale: entryScale,
-					left,
-					top,
-					maximized: false,
-					closing: false
-				}
-
-				cardStates.set(card, state)
-				applyTransform(card, state)
-				board.appendChild(card)
-
-				requestAnimationFrame(() => {
-					requestAnimationFrame(() => {
-						state.scale = 1
-						applyTransform(card, state)
-						card.style.opacity = '1'
-					})
-				})
-
-				if (board.children.length > maxCards) {
-					const oldest = board.firstElementChild
-					if (oldest && oldest !== card) {
-						oldest.remove()
-					}
-				}
-			}
-
-			for (let i = 0; i < initialCardCount; i++) {
-				setTimeout(createCard, i * (isMobile ? 60 : 40))
-			}
-
-			scheduleNextSpawn()
-
-			document.addEventListener('visibilitychange', () => {
-				if (!document.hidden) {
-					scheduleNextSpawn()
-				}
-			})
-
-			if (typeof pointerMediaQuery.addEventListener === 'function') {
-				pointerMediaQuery.addEventListener('change', syncMobileMode)
-			} else if (typeof pointerMediaQuery.addListener === 'function') {
-				pointerMediaQuery.addListener(syncMobileMode)
-			}
-
-			window.addEventListener('resize', syncMobileMode)
-		</script>
-	</body>
-</html>
+<!-- saved from url=(0045)file:///C:/Users/wlq/Downloads/%E2%9D%A4.html -->
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>❤</title>
+	<style>
+		@keyframes fadeIn {
+		    from { opacity: 0; }
+		    to { opacity: 1; }
+		}
+		
+		* {
+		    margin: 0;
+		    padding: 0;
+		    box-sizing: border-box;
+		}
+		
+		body {
+		    font-family: 'Microsoft YaHei', sans-serif;
+		    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+		    min-height: 100vh;
+		    overflow: auto;
+		    position: relative;
+		    -webkit-overflow-scrolling: touch;
+		}
+		
+		.love-background {
+		    position: fixed;
+		    top: 0;
+		    left: 0;
+		    width: 100%;
+		    height: 100%;
+		    z-index: 1;
+		    pointer-events: none;
+		    display: flex;
+		    justify-content: center;
+		    align-items: center;
+		}
+		
+		.love {
+		    display: grid;
+		    grid-template-columns: repeat(9, 25px);
+		    grid-template-rows: repeat(8, 25px);
+		    gap: 2px;
+		    width: fit-content;
+		    height: fit-content;
+		            margin: 0 auto;
+		}
+		
+		.box {
+		    width: 25px;
+		    height: 25px;
+		    border-radius: 2px;
+		}
+		
+		.box:not(.transparent) {
+		    background-color: rgb(245, 9, 9);
+		    opacity: 0;
+		    transform: translateY(-300px);
+		    animation: move 4s infinite;
+		}
+		
+		@keyframes move {
+		    25% {
+		        opacity: 1;
+		        transform: translateY(0);
+		    }
+		    50% {
+		        opacity: 1;
+		        transform: translateY(0);
+		    }
+		    65% {
+		        opacity: 1;
+		        transform: translateY(0);
+		    }
+		    100% {
+		        opacity: 0;
+		        transform: translateY(300px);
+		    }
+		}
+		
+		.box.delay1 { animation-delay: .1s; }
+		.box.delay2 { animation-delay: .2s; }
+		.box.delay3 { animation-delay: .4s; }
+		.box.delay4 { animation-delay: .5s; }
+		.box.delay5 { animation-delay: .7s; }
+		.box.delay6 { animation-delay: .9s; }
+		
+		.main-content {
+		    position: relative;
+		    z-index: 10;
+		    width: 100%;
+		    min-height: 100vh;
+		    display: flex;
+		    justify-content: center;
+		    align-items: center;
+		}
+		
+		.welcome-container {
+		    background: rgba(255, 255, 255, 0.95);
+		    padding: 40px;
+		    border-radius: 15px;
+		    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+		    text-align: center;
+		    max-width: 500px;
+		    animation: fadeIn 0.8s ease-out;
+		    backdrop-filter: blur(10px);
+		}
+		
+		.welcome-title {
+		    color: #ff6b6b;
+		    font-size: 32px;
+		    margin-bottom: 20px;
+		    display: flex;
+		    align-items: center;
+		    justify-content: center;
+		    gap: 10px;
+		}
+		
+		.welcome-message {
+		    font-size: 18px;
+		    color: #555;
+		    line-height: 1.6;
+		    margin-bottom: 25px;
+		    word-wrap: break-word;
+		    overflow-wrap: break-word;
+		}
+		
+		.mode-selection {
+		    display: flex;
+		    justify-content: center;
+		    gap: 15px;
+		    margin-bottom: 25px;
+		}
+		
+		.mode-btn {
+		    background: white;
+		    color: #666;
+		    border: 2px solid #ddd;
+		    padding: 10px 20px;
+		    font-size: 16px;
+		    border-radius: 30px;
+		    cursor: pointer;
+		    transition: all 0.3s;
+		    flex: 1;
+		    max-width: 150px;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.mode-btn:hover {
+		    border-color: #ff8e8e;
+		    color: #ff6b6b;
+		}
+		
+		.mode-btn.active {
+		    background: linear-gradient(to right, #ff6b6b, #ff8e8e);
+		    color: white;
+		    border-color: #ff6b6b;
+		    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+		}
+		
+		.start-btn {
+		    background: linear-gradient(to right, #ff6b6b, #ff8e8e);
+		    color: white;
+		    border: none;
+		    padding: 12px 30px;
+		    font-size: 18px;
+		    border-radius: 30px;
+		    cursor: pointer;
+		    transition: all 0.3s;
+		    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+		    width: 100%;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.start-btn:hover {
+		    transform: translateY(-3px);
+		    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+		}
+		
+		.start-btn:disabled {
+		    background: #cccccc;
+		    cursor: not-allowed;
+		    transform: none;
+		    box-shadow: none;
+		}
+		
+		.continue-btn {
+		    background: linear-gradient(to right, #4CAF50, #45a049);
+		    color: white;
+		    border: none;
+		    padding: 10px 20px;
+		    font-size: 16px;
+		    border-radius: 30px;
+		    cursor: pointer;
+		    transition: all 0.3s;
+		    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+		    margin-top: 15px;
+		    margin-right: 10px;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.continue-btn:hover {
+		    transform: translateY(-3px);
+		    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+		}
+		
+		.decline-btn {
+		    background: linear-gradient(to right, #f44336, #d32f2f);
+		    color: white;
+		    border: none;
+		    padding: 10px 20px;
+		    font-size: 16px;
+		    border-radius: 30px;
+		    cursor: pointer;
+		    transition: all 0.3s;
+		    box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
+		    margin-top: 15px;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.decline-btn:hover {
+		    transform: translateY(-3px);
+		    box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4);
+		}
+		
+		.tip-container {
+		    position: fixed;
+		    width: 270px;
+		    height: 75px;
+		    border-radius: 12px;
+		    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+		    display: flex;
+		    align-items: center;
+		    justify-content: center;
+		    text-align: center;
+		    padding: 10px;
+		    z-index: 999;
+		    animation: fadeIn 0.5s ease-out;
+		    cursor: pointer;
+		    transition: transform 0.2s;
+		    border: 2px solid rgba(255, 255, 255, 0.5);
+		}
+		
+		.tip-container:hover {
+		    transform: scale(1.08);
+		    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+		}
+		
+		.tip-text {
+		    font-size: 20px;
+		    font-weight: bold;
+		    color: #333;
+		    text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.7);
+		}
+		
+		.continue-prompt {
+		    position: fixed;
+		    top: 50%;
+		    left: 50%;
+		    transform: translate(-50%, -50%);
+		    background: white;
+		    padding: 30px;
+		    border-radius: 15px;
+		    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+		    text-align: center;
+		    z-index: 1002;
+		    animation: fadeIn 0.5s ease-out;
+		}
+		
+		.progress-container {
+		    position: fixed;
+		    top: 20px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    background: rgba(255, 255, 255, 0.8);
+		    padding: 10px 20px;
+		    border-radius: 20px;
+		    font-size: 16px;
+		    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+		    z-index: 1001;
+		}
+		
+		.hidden {
+		    display: none;
+		}
+		
+		.name-text {
+		    position: absolute;
+		    top: 20%;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    font-size: 60px;
+		    font-weight: bold;
+		    color: #ff6b6b;
+		    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+		    z-index: 2;
+		    pointer-events: none;
+		}
+		
+		.copyright {
+		    position: fixed;
+		    bottom: 10px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    color: #666;
+		    font-size: 11px;
+		    text-align: center;
+		    z-index: 100;
+		    background: rgba(255, 255, 255, 0.95);
+		    padding: 8px 15px;
+		    border-radius: 12px;
+		    backdrop-filter: blur(10px);
+		    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+		    width: 95%;
+		    max-width: 550px;
+		    line-height: 1.4;
+		}
+		
+		.copyright-content {
+		    line-height: 1.4;
+		}
+		
+		.copyright p {
+		    margin: 0 0 5px 0;
+		    color: #ff6b6b;
+		    font-weight: bold;
+		    font-size: 12px;
+		}
+		
+		.author-info {
+		    color: #666;
+		    font-size: 10px;
+		}
+		
+		.author-links {
+		    margin-top: 3px;
+		    display: flex;
+		    justify-content: center;
+		    align-items: center;
+		    flex-wrap: nowrap;
+		    gap: 8px;
+		    white-space: nowrap;
+		    overflow: hidden;
+		}
+		
+		.author-links a {
+		    color: #ff6b6b;
+		    text-decoration: none;
+		    transition: color 0.3s;
+		    font-size: 10px;
+		    white-space: nowrap;
+		    flex-shrink: 0;
+		}
+		
+		.author-links a:hover {
+		    color: #ff5252;
+		    text-decoration: underline;
+		}
+		
+		.author-links span {
+		    color: #666;
+		    font-size: 10px;
+		    white-space: nowrap;
+		    flex-shrink: 0;
+		}
+		
+		.download-buttons {
+		    display: flex;
+		    gap: 10px;
+		    margin-top: 15px;
+		}
+		
+		.download-btn {
+		    background: linear-gradient(to right, #667eea, #764ba2);
+		    color: white;
+		    border: none;
+		    padding: 12px 30px;
+		    font-size: 16px;
+		    border-radius: 30px;
+		    cursor: pointer;
+		    transition: all 0.3s;
+		    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+		    flex: 1;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.download-btn:hover {
+		    transform: translateY(-3px);
+		    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+		}
+		
+		.download-prompt {
+		    position: fixed;
+		    top: 50%;
+		    left: 50%;
+		    transform: translate(-50%, -50%);
+		    width: 350px;
+		    height: 200px;
+		    background: linear-gradient(135deg, #667eea, #764ba2);
+		    color: white;
+		    font-size: 18px;
+		    font-weight: bold;
+		    display: flex;
+		    flex-direction: column;
+		    align-items: center;
+		    justify-content: center;
+		    border-radius: 15px;
+		    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+		    z-index: 10000;
+		    text-align: center;
+		    padding: 20px;
+		    animation: fadeIn 0.5s ease-out;
+		}
+		
+		.download-prompt-buttons {
+		    display: flex;
+		    gap: 10px;
+		    margin-top: 15px;
+		}
+		
+		#downloadBtn2 {
+		    background: linear-gradient(to right, #4CAF50, #45a049);
+		    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+		}
+		
+		#downloadBtn2:hover {
+		    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+		}
+		
+		.douyin-btn {
+		    background: linear-gradient(to right, #ff6b6b, #ff8e8e);
+		    color: white;
+		    border: none;
+		    padding: 10px 20px;
+		    border-radius: 20px;
+		    cursor: pointer;
+		    font-size: 14px;
+		    transition: all 0.3s;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.douyin-btn:hover {
+		    transform: translateY(-2px);
+		    box-shadow: 0 4px 10px rgba(255, 107, 107, 0.4);
+		}
+		
+		.close-btn {
+		    background: rgba(255,255,255,0.2);
+		    color: white;
+		    border: 1px solid white;
+		    padding: 10px 20px;
+		    border-radius: 20px;
+		    cursor: pointer;
+		    font-size: 14px;
+		    transition: all 0.3s;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.close-btn:hover {
+		    background: rgba(255,255,255,0.3);
+		}
+		
+		.sponsor-corner {
+		    position: fixed;
+		    bottom: 100px;
+		    left: 20px;
+		    z-index: 50;
+		    text-align: center;
+		    animation: fadeIn 1s ease-out;
+		}
+		
+		.sponsor-corner .sponsor-image {
+		    width: 250px;
+		    height: auto;
+		    border-radius: 10px;
+		    cursor: pointer;
+		    transition: all 0.3s ease;
+		    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+		    border: 2px solid #ff6b6b;
+		    -webkit-user-drag: none;
+		    -khtml-user-drag: none;
+		    -moz-user-drag: none;
+		    -o-user-drag: none;
+		    user-drag: none;
+		}
+		
+		.sponsor-corner .sponsor-image:hover {
+		    transform: scale(1.1);
+		    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+		}
+		
+		.sponsor-corner .sponsor-desc {
+		    font-size: 12px;
+		    color: #ff6b6b;
+		    margin-top: 5px;
+		    font-weight: bold;
+		    text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.8);
+		}
+		
+		.sponsor-modal {
+		    position: fixed;
+		    top: 50%;
+		    left: 50%;
+		    transform: translate(-50%, -50%);
+		    background: white;
+		    padding: 30px;
+		    border-radius: 15px;
+		    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+		    z-index: 10000;
+		    text-align: center;
+		    animation: fadeIn 0.5s ease-out;
+		    max-width: 400px;
+		    width: 90%;
+		}
+		
+		.sponsor-modal h3 {
+		    color: #ff6b6b;
+		    margin-bottom: 15px;
+		}
+		
+		.sponsor-options {
+		    display: flex;
+		    flex-direction: column;
+		    gap: 10px;
+		    margin: 20px 0;
+		}
+		
+		.sponsor-option {
+		    background: linear-gradient(to right, #667eea, #764ba2);
+		    color: white;
+		    border: none;
+		    padding: 12px 20px;
+		    border-radius: 25px;
+		    cursor: pointer;
+		    font-size: 14px;
+		    transition: all 0.3s;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		
+		.sponsor-option:hover {
+		    transform: translateY(-2px);
+		    box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+		}
+		
+		.sponsor-close {
+		    background: #f5f5f5;
+		    color: #666;
+		    border: 1px solid #ddd;
+		    padding: 8px 20px;
+		    border-radius: 20px;
+		    cursor: pointer;
+		    font-size: 14px;
+		    -webkit-tap-highlight-color: transparent;
+		    touch-action: manipulation;
+		}
+		        .update-log {
+		            position: fixed;
+		            top: 20px;
+		            left: 20px;
+		            z-index: 100;
+		            background: rgba(255, 255, 255, 0.95);
+		            padding: 15px;
+		            border-radius: 10px;
+		            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+		            backdrop-filter: blur(10px);
+		            border: 1px solid rgba(255, 107, 107, 0.3);
+		            max-width: 300px;
+		            animation: fadeIn 0.8s ease-out;
+		        }
+		
+		        .update-log-toggle {
+		            background: linear-gradient(to right, #667eea, #764ba2);
+		            color: white;
+		            border: none;
+		            padding: 8px 16px;
+		            border-radius: 20px;
+		            cursor: pointer;
+		            font-size: 12px;
+		            font-weight: bold;
+		            transition: all 0.3s;
+		            margin-bottom: 10px;
+		            -webkit-tap-highlight-color: transparent;
+		            touch-action: manipulation;
+		        }
+		
+		        .update-log-toggle:hover {
+		            transform: translateY(-2px);
+		            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.4);
+		        }
+		
+		        .update-log-content {
+		            font-size: 12px;
+		            color: #666;
+		            line-height: 1.5;
+		            max-height: 0;
+		            overflow: hidden;
+		            transition: max-height 0.3s ease-out;
+		        }
+		
+		        .update-log-content.show {
+		            max-height: 200px;
+		        }
+		
+		        .update-log-item {
+		            margin-bottom: 8px;
+		            padding-left: 12px;
+		            border-left: 2px solid #ff6b6b;
+		        }
+		
+		        .update-log-date {
+		            color: #ff6b6b;
+		            font-weight: bold;
+		            font-size: 11px;
+		        }
+		
+		        .update-log-text {
+		            color: #555;
+		            font-size: 11px;
+		        }
+		
+		@media (max-width: 768px) {
+		        .love {
+		        grid-template-columns: repeat(9, 15px);
+		        grid-template-rows: repeat(8, 15px);
+		        gap: 1px;
+		        transform: scale(0.9);
+		        }
+		    
+		    .box {
+		        width: 10px;
+		        height: 10px;
+		    }
+		    
+		    .welcome-container {
+		        padding: 25px 15px;
+		        margin: 15px;
+		        max-width: 90%;
+		    }
+		    
+		    .welcome-title {
+		        font-size: 24px;
+		        margin-bottom: 15px;
+		    }
+		    
+		    .welcome-message {
+		        font-size: 16px;
+		        margin-bottom: 20px;
+		    }
+		    
+		    .mode-selection {
+		        flex-direction: column;
+		        gap: 10px;
+		        margin-bottom: 20px;
+		    }
+		    
+		    .mode-btn {
+		        max-width: 100%;
+		        padding: 12px 20px;
+		        font-size: 16px;
+		    }
+		    
+		    .start-btn {
+		        padding: 14px 20px;
+		        font-size: 16px;
+		    }
+		    
+		    .download-buttons {
+		        flex-direction: column;
+		        gap: 10px;
+		    }
+		    
+		    .download-btn {
+		        padding: 12px 20px;
+		        font-size: 14px;
+		    }
+		    
+		    .name-text {
+		        font-size: 36px;
+		        top: 15%;
+		    }
+		    
+		    .copyright {
+		        bottom: 8px;
+		        padding: 6px 12px;
+		        font-size: 10px;
+		        width: 96%;
+		        max-width: 500px;
+		    }
+		    
+		    .copyright p {
+		        font-size: 11px;
+		        margin-bottom: 4px;
+		    }
+		    
+		    .author-info {
+		        font-size: 9px;
+		    }
+		    
+		    .author-links {
+		        gap: 6px;
+		    }
+		    
+		    .author-links a {
+		        font-size: 9px;
+		    }
+		    
+		    .author-links span {
+		        font-size: 9px;
+		    }
+		    
+		    .sponsor-corner {
+		        bottom: 80px;
+		        left: 10px;
+		    }
+		    
+		    .sponsor-corner .sponsor-image {
+		        width: 120px;
+		    }
+		    
+		    .sponsor-corner .sponsor-desc {
+		        font-size: 12px;
+		    }
+		    
+		    .tip-container {
+		        width: 250px;
+		        height: 70px;
+		    }
+		    
+		    .continue-prompt {
+		        padding: 20px;
+		        max-width: 90%;
+		    }
+		    
+		    .download-prompt {
+		        width: 90%;
+		        height: auto;
+		        padding: 20px;
+		    }
+		    
+		    .progress-container {
+		        top: 10px;
+		        padding: 8px 15px;
+		        font-size: 14px;
+		    }
+		             .update-log {
+		                top: 15px;
+		                left: 15px;
+		                padding: 12px;
+		                max-width: 250px;
+		            }
+		            
+		            .update-log-toggle {
+		                padding: 6px 12px;
+		                font-size: 11px;
+		            }
+		            
+		            .update-log-content {
+		                font-size: 11px;
+		            }
+		            
+		            .update-log-date {
+		                font-size: 10px;
+		            }
+		            
+		            .update-log-text {
+		                font-size: 10px;
+		            }
+		}
+		
+		@media (max-width: 480px) {
+		    .love {
+		        grid-template-columns: repeat(9, 10px);
+		        grid-template-rows: repeat(8, 10px);
+		        transform: scale(0.7);
+		    }
+		    
+		    .box {
+		        width: 10px;
+		        height: 10px;
+		    }
+		    
+		    .welcome-container {
+		        padding: 20px 12px;
+		        margin: 10px;
+		    }
+		    
+		    .welcome-title {
+		        font-size: 22px;
+		        margin-bottom: 12px;
+		    }
+		    
+		    .welcome-message {
+		        font-size: 15px;
+		        margin-bottom: 18px;
+		    }
+		    
+		    .mode-btn {
+		        padding: 10px 16px;
+		        font-size: 15px;
+		    }
+		    
+		    .start-btn {
+		        padding: 12px 18px;
+		        font-size: 15px;
+		    }
+		    
+		    .download-btn {
+		        padding: 10px 16px;
+		        font-size: 13px;
+		    }
+		    
+		    .name-text {
+		        font-size: 32px;
+		        top: 12%;
+		    }
+		    
+		    .copyright {
+		        bottom: 6px;
+		        padding: 5px 10px;
+		        font-size: 9px;
+		        width: 97%;
+		        max-width: 450px;
+		    }
+		    
+		    .copyright p {
+		        font-size: 10px;
+		        margin-bottom: 3px;
+		    }
+		    
+		    .author-info {
+		        font-size: 8px;
+		    }
+		    
+		    .author-links {
+		        gap: 4px;
+		    }
+		    
+		    .author-links a {
+		        font-size: 8px;
+		    }
+		    
+		    .author-links span {
+		        font-size: 8px;
+		    }
+		    
+		    .sponsor-corner {
+		        bottom: 70px;
+		        left: 8px;
+		    }
+		    
+		    .sponsor-corner .sponsor-image {
+		        width: 100px;
+		    }
+		    
+		    .sponsor-corner .sponsor-desc {
+		        font-size: 11px;
+		    }
+		    
+		    .tip-container {
+		        width: 220px;
+		        height: 60px;
+		    }
+		    
+		    .continue-prompt {
+		        padding: 15px;
+		    }
+		    
+		    .download-prompt {
+		        padding: 15px;
+		    }
+		    
+		    .progress-container {
+		        top: 8px;
+		        padding: 6px 12px;
+		        font-size: 13px;
+		    }
+		            .update-log {
+		                top: 10px;
+		                left: 10px;
+		                padding: 10px;
+		                max-width: 200px;
+		            }
+		            
+		            .update-log-toggle {
+		                padding: 5px 10px;
+		                font-size: 10px;
+		            }
+		            
+		            .update-log-content {
+		                font-size: 10px;
+		            }
+		            
+		            .update-log-date {
+		                font-size: 9px;
+		            }
+		            
+		            .update-log-text {
+		                font-size: 9px;
+		            }
+		}
+		
+		@media (max-height: 500px) and (orientation: landscape) {
+		            .love {
+		        grid-template-columns: repeat(9, 10px);
+		        grid-template-rows: repeat(8, 10px);
+		        gap: 1px;
+		        transform: scale(0.7);
+		    }
+		    
+		    .box {
+		        width: 10px;
+		        height: 10px;
+		    }
+		    .welcome-container {
+		        padding: 15px 20px;
+		        max-width: 80%;
+		    }
+		    
+		    .welcome-title {
+		        font-size: 20px;
+		        margin-bottom: 10px;
+		    }
+		    
+		    .welcome-message {
+		        font-size: 14px;
+		        margin-bottom: 15px;
+		    }
+		    
+		    .mode-selection {
+		        margin-bottom: 15px;
+		    }
+		    
+		    .name-text {
+		        font-size: 28px;
+		        top: 10%;
+		    }
+		    
+		    .copyright {
+		        bottom: 5px;
+		        padding: 4px 10px;
+		        font-size: 9px;
+		    }
+		    
+		    .copyright p {
+		        font-size: 10px;
+		        margin-bottom: 2px;
+		    }
+		    
+		    .author-info {
+		        font-size: 8px;
+		    }
+		    
+		    .author-links {
+		        margin-top: 1px;
+		    }
+		    
+		    .sponsor-corner {
+		        bottom: 60px;
+		    }
+		    
+		    .sponsor-corner .sponsor-image {
+		        width: 80px;
+		    }
+		            .update-log {
+		                top: 10px;
+		                left: 10px;
+		                max-width: 200px;
+		            }
+		}
+		
+		@media (max-width: 320px) {
+		    .welcome-container {
+		        padding: 15px 10px;
+		    }
+		    
+		    .welcome-title {
+		        font-size: 20px;
+		    }
+		    
+		    .welcome-message {
+		        font-size: 14px;
+		    }
+		    
+		    .mode-btn {
+		        padding: 8px 12px;
+		        font-size: 14px;
+		    }
+		    
+		    .start-btn {
+		        padding: 10px 15px;
+		        font-size: 14px;
+		    }
+		    
+		    .name-text {
+		        font-size: 28px;
+		    }
+		    
+		    .copyright {
+		        bottom: 5px;
+		        padding: 4px 8px;
+		        font-size: 8px;
+		        width: 98%;
+		    }
+		    
+		    .copyright p {
+		        font-size: 9px;
+		    }
+		    
+		    .author-info {
+		        font-size: 7px;
+		    }
+		    
+		    .author-links a {
+		        font-size: 7px;
+		    }
+		    
+		    .sponsor-corner .sponsor-image {
+		        width: 80px;
+		    }
+		}
+		
+		html {
+		    -webkit-text-size-adjust: 100%;
+		    -ms-text-size-adjust: 100%;
+		    text-size-adjust: 100%;
+		}
+	</style>
+</head>
+<body>
+
+	<div class="love-background">
+		<div class="name-text">IDeal天天开心</div>
+		<div class="love">
+			<div class="box transparent"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay2"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box white delay4"></div>
+			<div class="box white delay3"></div>
+			<div class="box transparent"></div>
+			<div class="box clear white delay5"></div>
+			<div class="box white delay5"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay3"></div>
+			<div class="box transparent"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay4"></div>
+			<div class="box white delay2"></div>
+			<div class="box clear white"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay4"></div>
+			<div class="box white delay2"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay3"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay3"></div>
+			<div class="box white delay1"></div>
+			<div class="box clear white"></div>
+			<div class="box white delay3"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay3"></div>
+			<div class="box white delay5"></div>
+			<div class="box white delay2"></div>
+			<div class="box white delay4"></div>
+			<div class="box clear transparent"></div>
+			<div class="box white delay6"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay5"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay5"></div>
+			<div class="box white delay3"></div>
+			<div class="box white delay4"></div>
+			<div class="box transparent"></div>
+			<div class="box clear transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box white delay5"></div>
+			<div class="box white delay1"></div>
+			<div class="box white delay5"></div>
+			<div class="box white delay2"></div>
+			<div class="box white"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box clear transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box white"></div>
+			<div class="box white"></div>
+			<div class="box white delay2"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box clear transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box white delay1"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+			<div class="box transparent"></div>
+		</div>
+	</div>
+	
+	<div class="sponsor-corner">
+	</div>
+	<div class="main-content">
+		<div class="welcome-container" id="welcomeContainer">
+			<h1 class="welcome-title">
+				<span>❤</span> Hello IDeal <span>❤</span>
+			</h1>
+			<p class="welcome-message"> 请选择一个模式 </p>
+			<div class="mode-selection">
+				<button class="mode-btn" data-mode="slow">莹莹</button>
+				<button class="mode-btn" data-mode="fast">莹宝</button>
+			</div>
+			<button class="start-btn" id="startBtn" disabled="">开始</button>
+		</div>
+	</div>
+	<div class="continue-prompt hidden" id="continuePrompt">
+		<h3>恭喜你发现了彩蛋</h3>
+		<p>要查看彩蛋内容吗</p>
+		<button class="continue-btn" id="continueBtn">想</button>
+		<button class="decline-btn" id="declineBtn">不想</button>
+	</div>
+	<div class="progress-container hidden" id="progressContainer"> 第一阶段进度: <span id="progress">0</span>/5 </div>
+	<script>
+		// var _hmt = _hmt || [];
+		//     (function() {
+		//     var hm = document.createElement("script");
+		//     hm.src = "https://hm.baidu.com/hm.js?01ba0162279807d5f9514e4bb4908a58";
+		//     var s = document.getElementsByTagName("script")[0]; 
+		//     s.parentNode.insertBefore(hm, s);
+		// })();
+		const tips = [
+		    '好好吃饭', '好好休息', '早点休息', '天天开心',
+		    '记得喝水', '按时吃饭', '注意身体', '记得运动',
+		    '放松一下', '保持好心情', '保持健康', '平安喜乐',
+		    '开心每一天', '一切顺利', '万事如意', '心想事成',
+		    '笑口常开', '保持微笑', '注意保暖', '劳逸结合',
+		    '照顾好自己', '记得微笑', '保持乐观', '顺心如意',
+		    '记得吃早餐', '别太劳累', '多喝热水', '保持活力',
+		    '记得微笑', '保持耐心', '一切安好', '幸福安康',
+		    '莹莹天天开心'
+		];
+		
+		const bgColors = [
+		    'lightpink', 'skyblue', 'lightgreen', 'lavender', 'lightyellow',
+		    'plum', 'coral', 'bisque', 'aquamarine', 'mistyrose', 'honeydew',
+		    'peachpuff', 'paleturquoise', 'lavenderblush', 'oldlace', 'lemonchiffon',
+		    'lightcyan', 'lightgray', 'lightpink', 'lightsalmon', 'lightseagreen',
+		    'lightskyblue', 'lightslategray', 'lightsteelblue', 'lightyellow'
+		];
+		
+		const welcomeContainer = document.getElementById('welcomeContainer');
+		const startBtn = document.getElementById('startBtn');
+		const continuePrompt = document.getElementById('continuePrompt');
+		const continueBtn = document.getElementById('continueBtn');
+		const declineBtn = document.getElementById('declineBtn');
+		const modeButtons = document.querySelectorAll('.mode-btn');
+		const progressContainer = document.getElementById('progressContainer');
+		const progressElement = document.getElementById('progress');
+		
+		let tipCount = 0;
+		const MAX_TIPS = 300;
+		const SLOW_MODE_INITIAL = 5;
+		let isRunning = false;
+		let selectedMode = null;
+		let slowModeInitialCompleted = false;
+		let initialTipsClicked = 0;
+		let initialTips = [];
+		
+		modeButtons.forEach(button => {
+		    button.addEventListener('click', function() {
+		        modeButtons.forEach(btn => btn.classList.remove('active'));
+		        this.classList.add('active');
+		        selectedMode = this.dataset.mode;
+		        startBtn.disabled = false;
+		    });
+		});
+		
+		function createTip(isInitial = false) {
+		    if (tipCount >= MAX_TIPS) {
+		        return;
+		    }
+		    
+		    const tipContainer = document.createElement('div');
+		    tipContainer.className = 'tip-container';
+		    
+		    const x = Math.random() * (window.innerWidth - 270);
+		    const y = Math.random() * (window.innerHeight - 75);
+		    tipContainer.style.left = `${x}px`;
+		    tipContainer.style.top = `${y}px`;
+		    
+		    const bgColor = bgColors[Math.floor(Math.random() * bgColors.length)];
+		    tipContainer.style.backgroundColor = bgColor;
+		    
+		    const tipText = tips[Math.floor(Math.random() * tips.length)];
+		    tipContainer.innerHTML = `<div class="tip-text">${tipText}</div>`;
+		
+		    tipContainer.addEventListener('click', function() {
+		        if (tipContainer.parentNode) {
+		            document.body.removeChild(tipContainer);
+		
+		            if (isInitial) {
+		                initialTipsClicked++;
+		                progressElement.textContent = initialTipsClicked;
+		
+		                if (initialTipsClicked >= SLOW_MODE_INITIAL) {
+		                    continuePrompt.classList.remove('hidden');
+		                }
+		            }
+		        }
+		    });
+		    
+		    if (!isInitial) {
+		        setTimeout(() => {
+		            if (tipContainer.parentNode) {
+		                document.body.removeChild(tipContainer);
+		            }
+		        }, 3000);
+		    }
+		    
+		    document.body.appendChild(tipContainer);
+		    tipCount++;
+		    
+		    if (isInitial) {
+		        initialTips.push(tipContainer);
+		    }
+		    
+		    if (tipCount >= MAX_TIPS) {
+		        setTimeout(() => {
+		            const endPopup = document.createElement('div');
+		            endPopup.className = 'tip-container';
+		            endPopup.style.cssText = `
+		                position: fixed;
+		                top: 50%;
+		                left: 50%;
+		                transform: translate(-50%, -50%);
+		                width: 300px;
+		                height: 150px;
+		                background: linear-gradient(135deg, #ff6b6b, #ff8e8e);
+		                color: white;
+		                font-size: 24px;
+		                font-weight: bold;
+		                display: flex;
+		                align-items: center;
+		                justify-content: center;
+		                border-radius: 15px;
+		                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+		                z-index: 10000;
+		                cursor: pointer;
+		            `;
+		            endPopup.innerHTML = '<div>END.</div>';
+		            
+		            endPopup.addEventListener('click', function() {
+		                document.body.removeChild(endPopup);
+		                location.reload();
+		            });
+		            
+		            document.body.appendChild(endPopup);
+		            setTimeout(() => {
+		                if (endPopup.parentNode) {
+		                    document.body.removeChild(endPopup);
+		                    location.reload();
+		                }
+		            }, 3000);
+		            
+		        }, 3000);
+		    }
+		    return tipContainer;
+		}
+		
+		function startTips() {
+		    if (isRunning || !selectedMode) return;
+		    
+		    welcomeContainer.classList.add('hidden');
+		    isRunning = true;
+		    
+		    if (selectedMode === 'fast') {
+		        for (let i = 0; i < MAX_TIPS; i++) {
+		            setTimeout(() => {
+		                createTip();
+		            }, i * 20);
+		        }
+		    } else if (selectedMode === 'slow') {
+		        progressElement.textContent = '0';
+		        
+		        for (let i = 0; i < SLOW_MODE_INITIAL; i++) {
+		            setTimeout(() => {
+		                createTip(true);
+		            }, i * 500);
+		        }
+		    }
+		}
+		
+		function continueSlowMode() {
+		    continuePrompt.classList.add('hidden');
+		    
+		    initialTips.forEach(tip => {
+		        if (tip.parentNode) {
+		            document.body.removeChild(tip);
+		        }
+		    });
+		    initialTips = [];
+		    
+		    for (let i = tipCount; i < MAX_TIPS; i++) {
+		        setTimeout(() => {
+		            createTip();
+		        }, (i - tipCount) * 20);
+		    }
+		}
+		
+		function declineEasterEgg() {
+		    continuePrompt.classList.add('hidden');
+		    
+		    initialTips.forEach(tip => {
+		        if (tip.parentNode) {
+		            document.body.removeChild(tip);
+		        }
+		    });
+		    initialTips = [];
+		
+		    alert('GoodBye');
+		    setTimeout(() => {
+		        window.close();
+		    }, 500);
+		}
+		
+		startBtn.addEventListener('click', startTips);
+		continueBtn.addEventListener('click', continueSlowMode);
+		declineBtn.addEventListener('click', declineEasterEgg);
+		
+		        function toggleUpdateLog() {
+		            const content = document.getElementById('updateLogContent');
+		            content.classList.toggle('show');
+		        }
+		
+		        document.addEventListener('click', function(event) {
+		            const updateLog = document.querySelector('.update-log');
+		            const updateLogToggle = document.querySelector('.update-log-toggle');
+		            
+		            if (!updateLog.contains(event.target) && !updateLogToggle.contains(event.target)) {
+		                const content = document.getElementById('updateLogContent');
+		                content.classList.remove('show');
+		            }
+		        });
+	</script>
+
+</body></html>
